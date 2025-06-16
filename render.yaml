@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: botganhos
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn botganhos:app
+    plan: free
