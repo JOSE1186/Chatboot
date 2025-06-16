@@ -37,9 +37,5 @@ def whatsapp_bot():
 
     return str(resp)
 
-# Torna o app visível para o gunicorn
-if __name__ != "__main__":
-    application = app
-
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
