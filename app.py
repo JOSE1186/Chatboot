@@ -1,8 +1,9 @@
-from flask import Flask, request
+from flask import Flask, request, session
 from twilio.twiml.messaging_response import MessagingResponse
 import os
 
 app = Flask(__name__)
+app.secret_key = 'chave-secreta-super-segura'  # troque para algo seguro
 
 @app.route("/")
 def home():
@@ -10,9 +11,36 @@ def home():
 
 @app.route("/sms", methods=["POST"])
 def sms_reply():
-    msg = request.form.get("Body")
+    msg = request.form.get("Body").strip()
     resp = MessagingResponse()
-    resp.message(f"Você disse: {msg}")
+
+    if "state" not in session:
+        session["state"] = "start"
+
+    if session["state"] == "start":
+        resp.message("Olá! Qual é o valor do seu ganho hoje?")
+        session["state"] = "waiting_gain"
+    elif session["state"] == "waiting_gain":
+        try:
+            ganho = float(msg.replace(",", "."))
+            session["ganho"] = ganho
+            resp.message("Quanto você gastou de combustível hoje?")
+            session["state"] = "waiting_fuel"
+        except ValueError:
+            resp.message("Por favor, envie um número válido para o ganho.")
+    elif session["state"] == "waiting_fuel":
+        try:
+            combustivel = float(msg.replace(",", "."))
+            ganho = session.get("ganho", 0)
+            liquido = ganho - combustivel
+            resp.message(f"O valor líquido do ganho de hoje é: R$ {liquido:.2f}")
+            session.clear()  # resetar conversa
+        except ValueError:
+            resp.message("Por favor, envie um número válido para o combustível.")
+    else:
+        resp.message("Erro inesperado. Vamos começar novamente.")
+        session.clear()
+
     return str(resp)
 
 if __name__ == "__main__":
