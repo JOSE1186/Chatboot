@@ -1,85 +1,86 @@
 from flask import Flask, request
 from twilio.twiml.messaging_response import MessagingResponse
-import json
 import os
+import json
 
 app = Flask(__name__)
 
 DATA_FILE = "dados.json"
 
-# Inicializa o arquivo se não existir
-def init_storage():
+# Função para carregar dados
+def carregar_dados():
     if not os.path.exists(DATA_FILE):
         with open(DATA_FILE, "w") as f:
             json.dump({}, f)
-
-# Carrega os dados do arquivo
-def load_data():
     with open(DATA_FILE, "r") as f:
         return json.load(f)
 
-# Salva os dados no arquivo
-def save_data(data):
+# Função para salvar dados
+def salvar_dados(dados):
     with open(DATA_FILE, "w") as f:
-        json.dump(data, f)
+        json.dump(dados, f)
+
+# Função principal da rota /sms
+@app.route("/sms", methods=["POST"])
+def sms_reply():
+    numero = request.form.get("From")
+    msg = request.form.get("Body").strip()
+    dados = carregar_dados()
+
+    if numero not in dados:
+        dados[numero] = {
+            "estado": "menu",
+            "ganhos": [],
+            "combustiveis": []
+        }
+
+    usuario = dados[numero]
+    estado = usuario["estado"]
+    resposta = MessagingResponse()
+
+    if estado == "menu":
+        if msg == "1":
+            usuario["estado"] = "aguardando_ganho"
+            resposta.message("Qual é o valor do ganho hoje?")
+        elif msg == "2":
+            total_bruto = sum(usuario["ganhos"])
+            total_combustivel = sum(usuario["combustiveis"])
+            total_liquido = total_bruto - total_combustivel
+            resposta.message(f"Total bruto: R$ {total_bruto:.2f}\nTotal líquido: R$ {total_liquido:.2f}")
+        elif msg == "3":
+            resposta.message("Saindo... (Envie qualquer mensagem para voltar ao menu)")
+        else:
+            resposta.message("Escolha uma opção:\n1 - Adicionar ganhos do dia\n2 - Ver total bruto e líquido\n3 - Sair")
+    elif estado == "aguardando_ganho":
+        try:
+            ganho = float(msg)
+            usuario["ganho_temp"] = ganho
+            usuario["estado"] = "aguardando_combustivel"
+            resposta.message("Quanto gastou de combustível?")
+        except ValueError:
+            resposta.message("Por favor, digite um valor numérico para o ganho.")
+    elif estado == "aguardando_combustivel":
+        try:
+            combustivel = float(msg)
+            ganho = usuario.pop("ganho_temp")
+            usuario["ganhos"].append(ganho)
+            usuario["combustiveis"].append(combustivel)
+            liquido = ganho - combustivel
+            resposta.message(f"Ganho registrado!\nValor líquido do dia: R$ {liquido:.2f}")
+            usuario["estado"] = "menu"
+        except ValueError:
+            resposta.message("Por favor, digite um valor numérico para o combustível.")
+    else:
+        usuario["estado"] = "menu"
+        resposta.message("Opção inválida. Retornando ao menu.")
+
+    salvar_dados(dados)
+    return str(resposta)
 
 @app.route("/")
 def home():
-    return "Bot ativo!"
-
-@app.route("/sms", methods=["POST"])
-def sms_reply():
-    msg = request.form.get("Body").strip()
-    number = request.form.get("From")
-
-    data = load_data()
-    user = data.get(number, {"state": "menu", "ganhos": [], "combustiveis": []})
-
-    resp = MessagingResponse()
-    response_msg = ""
-
-    if user["state"] == "menu":
-        if msg == "1":
-            user["state"] = "esperando_ganho"
-            response_msg = "Qual é o valor do ganho de hoje?"
-        elif msg == "2":
-            total_bruto = sum(user["ganhos"])
-            total_combustivel = sum(user["combustiveis"])
-            total_liquido = total_bruto - total_combustivel
-            response_msg = f"\nTotal bruto: R$ {total_bruto:.2f}\nTotal líquido: R$ {total_liquido:.2f}"
-        elif msg == "3":
-            response_msg = "Saindo... Para iniciar novamente, envie qualquer mensagem."
-            user = {"state": "menu", "ganhos": [], "combustiveis": []}
-        else:
-            response_msg = ("Escolha uma opção:\n1 - Adicionar ganhos do dia\n"
-                            "2 - Ver total bruto e líquido\n3 - Sair")
-
-    elif user["state"] == "esperando_ganho":
-        try:
-            user["ganho_temp"] = float(msg)
-            user["state"] = "esperando_combustivel"
-            response_msg = "Quanto gastou de combustível?"
-        except ValueError:
-            response_msg = "Por favor, envie um número válido para o ganho."
-
-    elif user["state"] == "esperando_combustivel":
-        try:
-            combustivel = float(msg)
-            ganho = user.pop("ganho_temp")
-            user["ganhos"].append(ganho)
-            user["combustiveis"].append(combustivel)
-            liquido = ganho - combustivel
-            user["state"] = "menu"
-            response_msg = f"O valor líquido do ganho de hoje é: R$ {liquido:.2f}"
-        except ValueError:
-            response_msg = "Por favor, envie um número válido para o combustível."
-
-    data[number] = user
-    save_data(data)
-    resp.message(response_msg)
-    return str(resp)
+    return "Bot está ativo no Render!"
 
 if __name__ == "__main__":
-    init_storage()
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
