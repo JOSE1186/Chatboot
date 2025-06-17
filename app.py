@@ -7,79 +7,67 @@ app = Flask(__name__)
 
 DATA_FILE = "dados.json"
 
-# Função para carregar dados
 def carregar_dados():
-    if not os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "w") as f:
-            json.dump({}, f)
-    with open(DATA_FILE, "r") as f:
-        return json.load(f)
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, "r") as f:
+            return json.load(f)
+    else:
+        return {"ganhos": [], "combustiveis": []}
 
-# Função para salvar dados
 def salvar_dados(dados):
     with open(DATA_FILE, "w") as f:
         json.dump(dados, f)
 
-# Função principal da rota /sms
-@app.route("/sms", methods=["POST"])
-def sms_reply():
-    numero = request.form.get("From")
-    msg = request.form.get("Body").strip()
-    dados = carregar_dados()
-
-    if numero not in dados:
-        dados[numero] = {
-            "estado": "menu",
-            "ganhos": [],
-            "combustiveis": []
-        }
-
-    usuario = dados[numero]
-    estado = usuario["estado"]
-    resposta = MessagingResponse()
-
-    if estado == "menu":
-        if msg == "1":
-            usuario["estado"] = "aguardando_ganho"
-            resposta.message("Qual é o valor do ganho hoje?")
-        elif msg == "2":
-            total_bruto = sum(usuario["ganhos"])
-            total_combustivel = sum(usuario["combustiveis"])
-            total_liquido = total_bruto - total_combustivel
-            resposta.message(f"Total bruto: R$ {total_bruto:.2f}\nTotal líquido: R$ {total_liquido:.2f}")
-        elif msg == "3":
-            resposta.message("Saindo... (Envie qualquer mensagem para voltar ao menu)")
-        else:
-            resposta.message("Escolha uma opção:\n1 - Adicionar ganhos do dia\n2 - Ver total bruto e líquido\n3 - Sair")
-    elif estado == "aguardando_ganho":
-        try:
-            ganho = float(msg)
-            usuario["ganho_temp"] = ganho
-            usuario["estado"] = "aguardando_combustivel"
-            resposta.message("Quanto gastou de combustível?")
-        except ValueError:
-            resposta.message("Por favor, digite um valor numérico para o ganho.")
-    elif estado == "aguardando_combustivel":
-        try:
-            combustivel = float(msg)
-            ganho = usuario.pop("ganho_temp")
-            usuario["ganhos"].append(ganho)
-            usuario["combustiveis"].append(combustivel)
-            liquido = ganho - combustivel
-            resposta.message(f"Ganho registrado!\nValor líquido do dia: R$ {liquido:.2f}")
-            usuario["estado"] = "menu"
-        except ValueError:
-            resposta.message("Por favor, digite um valor numérico para o combustível.")
-    else:
-        usuario["estado"] = "menu"
-        resposta.message("Opção inválida. Retornando ao menu.")
-
-    salvar_dados(dados)
-    return str(resposta)
-
 @app.route("/")
 def home():
     return "Bot está ativo no Render!"
+
+@app.route("/sms", methods=["POST"])
+def sms_reply():
+    numero = request.form.get("From")
+    msg = request.form.get("Body").strip().lower()
+
+    print(f"Mensagem recebida de {numero}: {msg}")  # 👈 Isso vai mostrar o que o Twilio enviou
+
+    dados = carregar_dados()
+    ganhos = dados["ganhos"]
+    combustiveis = dados["combustiveis"]
+    resp = MessagingResponse()
+
+    if msg == "1":
+        resp.message("Qual foi o ganho de hoje? Envie no formato: ganho:100.00")
+    elif msg.startswith("ganho:"):
+        try:
+            valor = float(msg.split(":")[1])
+            dados["ganhos"].append(valor)
+            salvar_dados(dados)
+            resp.message("Ganho registrado! Agora envie o combustível no formato: combustivel:30.00")
+        except:
+            resp.message("Formato inválido. Use: ganho:100.00")
+    elif msg.startswith("combustivel:"):
+        try:
+            valor = float(msg.split(":")[1])
+            dados["combustiveis"].append(valor)
+            salvar_dados(dados)
+            liquido = dados["ganhos"][-1] - valor
+            resp.message(f"Combustível registrado!\nLucro líquido do dia: R$ {liquido:.2f}")
+        except:
+            resp.message("Formato inválido. Use: combustivel:30.00")
+    elif msg == "2":
+        total_bruto = sum(ganhos)
+        total_combustivel = sum(combustiveis)
+        total_liquido = total_bruto - total_combustivel
+        resposta = (
+            f"Total bruto: R$ {total_bruto:.2f}\n"
+            f"Total líquido: R$ {total_liquido:.2f}"
+        )
+        resp.message(resposta)
+    elif msg == "3":
+        resp.message("Encerrando o bot. Até mais!")
+    else:
+        resp.message("Escolha uma opção:\n1 - Adicionar ganhos do dia\n2 - Ver total\n3 - Sair")
+
+    return str(resp)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
