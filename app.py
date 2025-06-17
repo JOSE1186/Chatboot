@@ -1,22 +1,19 @@
 from flask import Flask, request
 from twilio.twiml.messaging_response import MessagingResponse
 import os
-import json
+from supabase import create_client, Client
 
 app = Flask(__name__)
 
-DATA_FILE = "dados.json"
+# Ler URL e chave anon do Supabase das variáveis de ambiente
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY")
 
-def carregar_dados():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r") as f:
-            return json.load(f)
-    else:
-        return {"ganhos": [], "combustiveis": []}
+if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+    raise Exception("Faltando SUPABASE_URL ou SUPABASE_ANON_KEY nas variáveis de ambiente")
 
-def salvar_dados(dados):
-    with open(DATA_FILE, "w") as f:
-        json.dump(dados, f)
+# Criar cliente Supabase
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 @app.route("/")
 def home():
@@ -27,11 +24,6 @@ def sms_reply():
     numero = request.form.get("From")
     msg = request.form.get("Body").strip().lower()
 
-    print(f"Mensagem recebida de {numero}: {msg}")  # 👈 Isso vai mostrar o que o Twilio enviou
-
-    dados = carregar_dados()
-    ganhos = dados["ganhos"]
-    combustiveis = dados["combustiveis"]
     resp = MessagingResponse()
 
     if msg == "1":
@@ -39,36 +31,42 @@ def sms_reply():
     elif msg.startswith("ganho:"):
         try:
             valor = float(msg.split(":")[1])
-            dados["ganhos"].append(valor)
-            salvar_dados(dados)
+            # Salvar o ganho temporariamente em memória (no Supabase salvar junto com combustível)
+            # Como o usuário pode enviar combustível depois, vamos guardar no banco apenas quando receber ambos
+            # Para isso, salvamos o ganho associado ao número e com uma flag temporária?
+            # Mas simplificando aqui, já vamos salvar ganho e aguardar combustível.
+            # Para um bot simples, vamos salvar no banco assim:
+            supabase.table("ganhos_combustiveis").insert({
+                "numero": numero,
+                "ganho": valor,
+                "combustivel": 0.0  # ainda não recebeu
+            }).execute()
             resp.message("Ganho registrado! Agora envie o combustível no formato: combustivel:30.00")
         except:
             resp.message("Formato inválido. Use: ganho:100.00")
     elif msg.startswith("combustivel:"):
         try:
             valor = float(msg.split(":")[1])
-            dados["combustiveis"].append(valor)
-            salvar_dados(dados)
-            liquido = dados["ganhos"][-1] - valor
-            resp.message(f"Combustível registrado!\nLucro líquido do dia: R$ {liquido:.2f}")
+            # Atualizar o último registro deste usuário onde combustivel = 0.0
+            # Buscar último registro do usuário sem combustível registrado
+            dados = supabase.table("ganhos_combustiveis")\
+                .select("*")\
+                .eq("numero", numero)\
+                .eq("combustivel", 0.0)\
+                .order("id", desc=True)\
+                .limit(1).execute()
+            registros = dados.data
+            if registros:
+                registro = registros[0]
+                # Atualiza o campo combustivel deste registro
+                supabase.table("ganhos_combustiveis").update({
+                    "combustivel": valor
+                }).eq("id", registro["id"]).execute()
+                liquido = registro["ganho"] - valor
+                resp.message(f"Combustível registrado!\nLucro líquido do dia: R$ {liquido:.2f}")
+            else:
+                resp.message("Não foi encontrado ganho pendente para associar o combustível. Envie primeiro o ganho.")
         except:
             resp.message("Formato inválido. Use: combustivel:30.00")
     elif msg == "2":
-        total_bruto = sum(ganhos)
-        total_combustivel = sum(combustiveis)
-        total_liquido = total_bruto - total_combustivel
-        resposta = (
-            f"Total bruto: R$ {total_bruto:.2f}\n"
-            f"Total líquido: R$ {total_liquido:.2f}"
-        )
-        resp.message(resposta)
-    elif msg == "3":
-        resp.message("Encerrando o bot. Até mais!")
-    else:
-        resp.message("Escolha uma opção:\n1 - Adicionar ganhos do dia\n2 - Ver total\n3 - Sair")
-
-    return str(resp)
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+        # Calcular totais par
