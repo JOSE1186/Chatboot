@@ -1,68 +1,61 @@
 from flask import Flask, request, session
 from twilio.twiml.messaging_response import MessagingResponse
+from supabase import create_client, Client
 import os
 
+# Conexão com o Supabase
+url = "https://mbyuhxjbwmvbhpieywjm.supabase.co"
+key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ieXVoeGpid212YmhwaWV5d2ptIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAxODM0ODAsImV4cCI6MjA2NTc1OTQ4MH0.TF2gFOBExvn9FXb_n8gII-6FGf_NUc1VYvqk6ElCXAM"
+supabase: Client = create_client(url, key)
+
 app = Flask(__name__)
-app.secret_key = 'chave-secreta-super-segura'
+app.secret_key = 'chave-secreta-super-segura'  # mantenha seguro
 
 @app.route("/")
 def home():
-    return "Bot funcionando no Render!"
+    return "Bot está ativo no Render!"
 
 @app.route("/sms", methods=["POST"])
 def sms_reply():
+    msg = request.form.get("Body").strip()
     resp = MessagingResponse()
-    msg = request.form.get("Body", "").strip()
 
     if "state" not in session:
-        session["state"] = "menu"
-        session["bruto"] = []
-        session["liquido1"] = []
-        resp.message("Bot funcionando\n\nMenu:\n1 - Inserir ganho de hoje\n2 - Ver saldo\n3 - Sair")
-        return str(resp)
+        session["state"] = "start"
 
-    state = session["state"]
-    bruto = session.get("bruto", [])
-    liquido1 = session.get("liquido1", [])
+    if session["state"] == "start":
+        resp.message("Olá! Qual é o valor do seu ganho hoje?")
+        session["state"] = "waiting_gain"
 
-    if state == "menu":
-        if msg == "1":
-            session["state"] = "ganho"
-            resp.message("Digite o valor do ganho bruto:")
-        elif msg == "2":
-            total_bruto = sum(bruto)
-            total_liquido = sum(liquido1)
-            resp.message(f"Saldo bruto: R$ {total_bruto:.2f}\nSaldo líquido: R$ {total_liquido:.2f}")
-        elif msg == "3":
-            session.clear()
-            resp.message("Bot encerrado")
-        else:
-            resp.message("Opção inválida. Digite 1, 2 ou 3.")
-    elif state == "ganho":
+    elif session["state"] == "waiting_gain":
         try:
-            valor_bruto = float(msg.replace(",", "."))
-            session["valor_bruto"] = valor_bruto
-            session["state"] = "gasto"
-            resp.message("Digite o valor dos gastos:")
+            ganho = float(msg.replace(",", "."))
+            session["ganho"] = ganho
+            resp.message("Quanto você gastou de combustível hoje?")
+            session["state"] = "waiting_fuel"
         except ValueError:
-            resp.message("Valor inválido. Digite um número para o ganho.")
-    elif state == "gasto":
+            resp.message("Por favor, envie um número válido para o ganho.")
+
+    elif session["state"] == "waiting_fuel":
         try:
             combustivel = float(msg.replace(",", "."))
-            valor_bruto = session.get("valor_bruto", 0)
-            liquido = valor_bruto - combustivel
-            bruto.append(valor_bruto)
-            liquido1.append(liquido)
-            session["bruto"] = bruto
-            session["liquido1"] = liquido1
-            session["state"] = "menu"
-            resp.message("Ganho registrado com sucesso!\n\nMenu:\n1 - Inserir ganho de hoje\n2 - Ver saldo\n3 - Sair")
+            ganho = session.get("ganho", 0)
+            liquido = ganho - combustivel
+
+            # Salva os dados no Supabase
+            supabase.table("ganhos").insert({
+                "bruto": ganho,
+                "liquido": liquido
+            }).execute()
+
+            resp.message(f"O valor líquido do ganho de hoje é: R$ {liquido:.2f}")
+            session.clear()  # resetar conversa
         except ValueError:
-            resp.message("Valor inválido. Digite um número para os gastos.")
+            resp.message("Por favor, envie um número válido para o combustível.")
     else:
+        resp.message("Erro inesperado. Vamos começar novamente.")
         session.clear()
-        resp.message("Erro inesperado. Reiniciando...")
-    
+
     return str(resp)
 
 if __name__ == "__main__":
