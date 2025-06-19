@@ -40,7 +40,14 @@ def sms_reply():
             resp.message("Digite o valor do seu ganho bruto:")
             session["state"] = "waiting_gain"
         elif msg == "2":
-            resp.message("Para ver o saldo, use o bot local.")
+            try:
+                dados = supabase.table("ganhos").select("bruto", "liquido").execute()
+                total_bruto = sum(item["bruto"] for item in dados.data)
+                total_liquido = sum(item["liquido"] for item in dados.data)
+                resp.message(f"Saldo bruto total: R$ {total_bruto:.2f}\nSaldo líquido total: R$ {total_liquido:.2f}")
+            except Exception as e:
+                print(f"Erro ao buscar dados no Supabase: {e}")
+                resp.message("Erro ao buscar os saldos. Tente novamente mais tarde.")
             session["state"] = "start"
         elif msg == "3":
             resp.message("Bot encerrado. Até logo!")
@@ -65,10 +72,11 @@ def sms_reply():
 
             # Salvar no Supabase
             try:
-                supabase.table("ganhos").insert({
+                res = supabase.table("ganhos").insert({
                     "bruto": ganho,
                     "liquido": liquido
                 }).execute()
+                print(f"Resposta do Supabase: {res}")
                 resp.message(f"Seu ganho líquido hoje é: R$ {liquido:.2f}")
             except Exception as e:
                 print(f"Erro ao salvar no Supabase: {e}")
