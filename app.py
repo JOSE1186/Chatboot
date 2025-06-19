@@ -3,44 +3,66 @@ from twilio.twiml.messaging_response import MessagingResponse
 import os
 
 app = Flask(__name__)
-app.secret_key = 'chave-secreta-super-segura'  # troque para algo seguro
+app.secret_key = 'chave-secreta-super-segura'
 
 @app.route("/")
 def home():
-    return "Bot está ativo no Render!"
+    return "Bot funcionando no Render!"
 
 @app.route("/sms", methods=["POST"])
 def sms_reply():
-    msg = request.form.get("Body").strip()
     resp = MessagingResponse()
+    msg = request.form.get("Body", "").strip()
 
     if "state" not in session:
-        session["state"] = "start"
+        session["state"] = "menu"
+        session["bruto"] = []
+        session["liquido1"] = []
+        resp.message("Bot funcionando\n\nMenu:\n1 - Inserir ganho de hoje\n2 - Ver saldo\n3 - Sair")
+        return str(resp)
 
-    if session["state"] == "start":
-        resp.message("Olá! Qual é o valor do seu ganho hoje?")
-        session["state"] = "waiting_gain"
-    elif session["state"] == "waiting_gain":
+    state = session["state"]
+    bruto = session.get("bruto", [])
+    liquido1 = session.get("liquido1", [])
+
+    if state == "menu":
+        if msg == "1":
+            session["state"] = "ganho"
+            resp.message("Digite o valor do ganho bruto:")
+        elif msg == "2":
+            total_bruto = sum(bruto)
+            total_liquido = sum(liquido1)
+            resp.message(f"Saldo bruto: R$ {total_bruto:.2f}\nSaldo líquido: R$ {total_liquido:.2f}")
+        elif msg == "3":
+            session.clear()
+            resp.message("Bot encerrado")
+        else:
+            resp.message("Opção inválida. Digite 1, 2 ou 3.")
+    elif state == "ganho":
         try:
-            ganho = float(msg.replace(",", "."))
-            session["ganho"] = ganho
-            resp.message("Quanto você gastou de combustível hoje?")
-            session["state"] = "waiting_fuel"
+            valor_bruto = float(msg.replace(",", "."))
+            session["valor_bruto"] = valor_bruto
+            session["state"] = "gasto"
+            resp.message("Digite o valor dos gastos:")
         except ValueError:
-            resp.message("Por favor, envie um número válido para o ganho.")
-    elif session["state"] == "waiting_fuel":
+            resp.message("Valor inválido. Digite um número para o ganho.")
+    elif state == "gasto":
         try:
             combustivel = float(msg.replace(",", "."))
-            ganho = session.get("ganho", 0)
-            liquido = ganho - combustivel
-            resp.message(f"O valor líquido do ganho de hoje é: R$ {liquido:.2f}")
-            session.clear()  # resetar conversa
+            valor_bruto = session.get("valor_bruto", 0)
+            liquido = valor_bruto - combustivel
+            bruto.append(valor_bruto)
+            liquido1.append(liquido)
+            session["bruto"] = bruto
+            session["liquido1"] = liquido1
+            session["state"] = "menu"
+            resp.message("Ganho registrado com sucesso!\n\nMenu:\n1 - Inserir ganho de hoje\n2 - Ver saldo\n3 - Sair")
         except ValueError:
-            resp.message("Por favor, envie um número válido para o combustível.")
+            resp.message("Valor inválido. Digite um número para os gastos.")
     else:
-        resp.message("Erro inesperado. Vamos começar novamente.")
         session.clear()
-
+        resp.message("Erro inesperado. Reiniciando...")
+    
     return str(resp)
 
 if __name__ == "__main__":
