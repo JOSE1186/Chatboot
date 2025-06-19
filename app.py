@@ -8,7 +8,7 @@ app = Flask(__name__)
 # --- Defina suas variáveis aqui diretamente para teste ---
 
 SUPABASE_URL = "https://mbyuhxjbwmvbhpieywjm.supabase.co"
-SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ieXVoeGpid212YmhwaWV5d2ptIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAxODM0ODAsImV4cCI6MjA2NTc1OTQ4MH0.TF2gFOBExvn9FXb_n8gII-6FGf_NUc1VYvqk6ElCXAM"
+SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ieXVoeGpid212YmhpaWV5d2ptIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAxODM0ODAsImV4cCI6MjA2NTc1OTQ4MH0.TF2gFOBExvn9FXb_n8gII-6FGf_NUc1VYvqk6ElCXAM"
 
 # Se quiser usar as variáveis do ambiente, substitua acima por:
 # SUPABASE_URL = os.environ.get("SUPABASE_URL")
@@ -82,6 +82,26 @@ def sms_reply():
         resp.message("Comando inválido.\nEnvie:\n1 para registrar ganho\n2 para ver totais")
 
     return str(resp)
+
+def ler_float(mensagem):
+    while True:
+        valor = input(mensagem)
+        try:
+            return float(valor)
+        except ValueError:
+            print("Por favor, digite apenas números (use ponto para decimais).")
+
+# ...código de conexão e menu...
+
+    if opcao == "1":
+        ganho = ler_float("Qual é o valor do ganho hoje? ")
+        combustivel = ler_float("Quanto gastou de combustível? ")
+        ganhos.append(ganho)
+        combustiveis.append(combustivel)
+        liquido = ganho - combustivel
+        print("O valor líquido do ganho de hoje é: R$", liquido)
+
+        # ...restante do código...
 
 if __name__ == "__main__":
     app.run(debug=True)
