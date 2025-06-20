@@ -39,7 +39,7 @@ def sms_reply():
         if msg == "1":
             resp.message("Digite o valor do seu ganho bruto:")
             session["state"] = "waiting_gain"
-        elif msg == "2":
+        '''elif msg == "2":
             try:
                 dados = supabase.table("ganhos").select("bruto", "liquido").execute()
                 total_bruto = (item["bruto"] for item in dados.data)
@@ -48,7 +48,36 @@ def sms_reply():
             except Exception as e:
                 print(f"Erro ao buscar dados no Supabase: {e}")
                 resp.message("Erro ao buscar os saldos. Tente novamente mais tarde.")
-            session["state"] = "start"
+            session["state"] = "start"'''
+        elif msg == "2":
+    try:
+        dados = supabase.table("ganhos").select("bruto", "liquido").execute()
+
+        if not dados.data:
+            resp.message("Nenhum registro encontrado.")
+        else:
+            resposta = "📋 Ganhos registrados:\n"
+            total_bruto = 0
+            total_liquido = 0
+
+            for i, item in enumerate(dados.data, 1):
+                bruto = item.get("bruto", 0)
+                liquido = item.get("liquido", 0)
+                total_bruto += bruto
+                total_liquido += liquido
+                resposta += f"{i}. Bruto: R$ {bruto:.2f} | Líquido: R$ {liquido:.2f}\n"
+
+            resposta += "\n🔢 Totais:\n"
+            resposta += f"Bruto total: R$ {total_bruto:.2f}\n"
+            resposta += f"Líquido total: R$ {total_liquido:.2f}"
+
+            resp.message(resposta)
+
+    except Exception as e:
+        print(f"Erro ao buscar dados no Supabase: {e}")
+        resp.message("Erro ao buscar os dados. Tente novamente mais tarde.")
+
+    session["state"] = "start"
         elif msg == "3":
             resp.message("Bot encerrado. Até logo!")
             session.clear()
