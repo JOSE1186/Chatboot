@@ -46,17 +46,16 @@ def sms_reply():
 
                 if not dados.data:
                     resp.message("Nenhum registro encontrado.")
-                else:
-                    '''resposta = "📋 Ganhos registrados:\n"'''
+                else
                     total_bruto = 0
                     total_liquido = 0
 
-                    for i, item in enumerate(dados.data, 1):
+                    for i, item in dados.data:
                         bruto = item.get("bruto", 0)
                         liquido = item.get("liquido", 0)
                         total_bruto += bruto
                         total_liquido += liquido
-                        '''resposta += f"{i}. Bruto: R$ {bruto:.2f} | Líquido: R$ {liquido:.2f}\n"'''
+                        
 
                     resposta += "\n🔢 Totais:\n"
                     resposta += f"Bruto total: R$ {total_bruto:.2f}\n"
