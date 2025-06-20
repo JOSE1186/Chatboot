@@ -42,9 +42,9 @@ def sms_reply():
         elif msg == "2":
             try:
                 dados = supabase.table("ganhos").select("bruto", "liquido").execute()
-                total_bruto = sum(item["bruto"] for item in dados.data)
-                total_liquido = sum(item["liquido"] for item in dados.data)
-                resp.message(f"Saldo bruto total: R$ {bruto:.2f}\nSaldo líquido total: R$ {liquido:.2f}")
+                total_bruto = (item["bruto"] for item in dados.data)
+                total_liquido = (item["liquido"] for item in dados.data)
+                resp.message(f"Saldo bruto total: R$ {total_bruto:.2f}\nSaldo líquido total: R$ {total_liquido:.2f}")
             except Exception as e:
                 print(f"Erro ao buscar dados no Supabase: {e}")
                 resp.message("Erro ao buscar os saldos. Tente novamente mais tarde.")
