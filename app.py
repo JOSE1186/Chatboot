@@ -11,8 +11,8 @@ url = "https://mbyuhxjbwmvbhpieywjm.supabase.co"
 key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ieXVoeGpid212YmhwaWV5d2ptIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAxODM0ODAsImV4cCI6MjA2NTc1OTQ4MH0.TF2gFOBExvn9FXb_n8gII-6FGf_NUc1VYvqk6ElCXAM"
 supabase = create_client(url, key)
 
-# 🔁 Conversão de entrada do usuário para float
-def tentar_converter_para_float(texto):
+# 🔁 Tenta converter um texto em número decimal
+def converter_para_float(texto):
     try:
         texto_limpo = texto.strip().replace(",", ".")
         print(f"Texto recebido: '{texto}' | Texto limpo: '{texto_limpo}'")
@@ -20,38 +20,34 @@ def tentar_converter_para_float(texto):
     except ValueError:
         return None
 
-# 🏠 Rota inicial para teste de vida do app
-@app.route("/")
-def home():
-    return "Bot está ativo no Render!"
 
-# 📩 Rota principal para receber mensagens
+
+# 📩 Rota que recebe mensagens do usuário
 @app.route("/sms", methods=["POST"])
-def sms_reply():
-    msg = request.form.get("Body", "").strip()
-    resp = MessagingResponse()
+def responder_mensagem():
+    mensagem = request.form.get("Body", "").strip()
+    resposta = MessagingResponse()
 
-    # Inicia estado se for novo usuário
-    if "state" not in session:
-        session["state"] = "start"
+    # Iniciar sessão se não existir
+    if "estado" not in session:
+        session["estado"] = "inicio"
 
-    # Menu inicial
-    if session["state"] == "start":
-        resp.message("Olá! Digite 1 para inserir o ganho de hoje, 2 para ver saldo, 3 para sair.")
-        session["state"] = "menu"
+    # Mostrar menu principal
+    if session["estado"] == "inicio":
+        resposta.message("Olá! Digite 1 para inserir o ganho de hoje, 2 para ver saldo, 3 para sair.")
+        session["estado"] = "menu"
 
-    # Opções do menu
-    elif session["state"] == "menu":
-        if msg == "1":
-            resp.message("Digite o valor do seu ganho bruto:")
-            session["state"] = "waiting_gain"
+    elif session["estado"] == "menu":
+        if mensagem == "1":
+            resposta.message("Digite o valor do seu ganho bruto:")
+            session["estado"] = "aguardando_ganho"
 
-        elif msg == "2":
+        elif mensagem == "2":
             try:
                 dados = supabase.table("ganhos").select("bruto", "liquido").execute()
 
                 if not dados.data:
-                    resp.message("Nenhum registro encontrado.")
+                    resposta.message("Nenhum registro encontrado.")
                 else:
                     total_bruto = 0
                     total_liquido = 0
@@ -62,65 +58,62 @@ def sms_reply():
                         total_bruto += bruto
                         total_liquido += liquido
 
-                    resposta = "\n🔢 Totais:\n"
-                    resposta += f"Bruto total: R$ {total_bruto:.2f}\n"
-                    resposta += f"Líquido total: R$ {total_liquido:.2f}"
+                    texto_resposta = "\n🔢 Totais:\n"
+                    texto_resposta += f"Bruto total: R$ {total_bruto:.2f}\n"
+                    texto_resposta += f"Líquido total: R$ {total_liquido:.2f}"
 
-                    resp.message(resposta)
+                    resposta.message(texto_resposta)
 
-            except Exception as e:
-                print(f"Erro ao buscar dados no Supabase: {e}")
-                resp.message("Erro ao buscar os dados. Tente novamente mais tarde.")
+            except Exception as erro:
+                print(f"Erro ao buscar dados no Supabase: {erro}")
+                resposta.message("Erro ao buscar os dados. Tente novamente mais tarde.")
 
-            session["state"] = "start"
+            session["estado"] = "inicio"
 
-        elif msg == "3":
-            resp.message("Bot encerrado. Até logo!")
+        elif mensagem == "3":
+            resposta.message("Bot encerrado. Até logo!")
             session.clear()
 
         else:
-            resp.message("Opção inválida. Digite 1, 2 ou 3.")
+            resposta.message("Opção inválida. Digite 1, 2 ou 3.")
 
-    # Inserção do ganho bruto
-    elif session["state"] == "waiting_gain":
-        ganho = tentar_converter_para_float(msg)
+    elif session["estado"] == "aguardando_ganho":
+        ganho = converter_para_float(mensagem)
         if ganho is not None:
             session["ganho"] = ganho
-            resp.message("Agora digite o valor gasto com combustível:")
-            session["state"] = "waiting_fuel"
+            resposta.message("Agora digite o valor gasto com combustível:")
+            session["estado"] = "aguardando_combustivel"
         else:
-            resp.message("Por favor, envie um número válido. Ex: 100 ou 100.50")
+            resposta.message("Por favor, envie um número válido. Ex: 100 ou 100.50")
 
-    # Inserção do valor de combustível e cálculo
-    elif session["state"] == "waiting_fuel":
-        combustivel = tentar_converter_para_float(msg)
+    elif session["estado"] == "aguardando_combustivel":
+        combustivel = converter_para_float(mensagem)
         if combustivel is not None:
             ganho = session.get("ganho", 0)
             liquido = ganho - combustivel
 
             try:
-                res = supabase.table("ganhos").insert({
+                resultado = supabase.table("ganhos").insert({
                     "bruto": ganho,
                     "liquido": liquido
                 }).execute()
-                print(f"Resposta do Supabase: {res}")
-                resp.message(f"Seu ganho líquido hoje é: R$ {liquido:.2f}")
-            except Exception as e:
-                print(f"Erro ao salvar no Supabase: {e}")
-                resp.message("Erro ao salvar no banco. Tente novamente mais tarde.")
+                print(f"Resposta do Supabase: {resultado}")
+                #resposta.message(f"Seu ganho líquido hoje é: R$ {liquido:.2f}")
+            except Exception as erro:
+                print(f"Erro ao salvar no Supabase: {erro}")
+                resposta.message("Erro ao salvar no banco. Tente novamente mais tarde.")
 
             session.clear()
         else:
-            resp.message("Por favor, envie um número válido para o combustível.")
+            resposta.message("Por favor, envie um número válido para o combustível.")
 
-    # Fallback para estados inesperados
     else:
-        resp.message("Erro inesperado. Vamos recomeçar.")
+        resposta.message("Erro inesperado. Vamos recomeçar.")
         session.clear()
 
-    return str(resp)
+    return str(resposta)
 
-# ▶️ Inicialização do servidor
+# ▶️ Inicialização do servidor Flask
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    porta = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=porta)
