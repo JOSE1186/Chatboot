@@ -72,27 +72,16 @@ def responder_sms():
             ganho = session.get("ganho", 0)
             liquido = ganho - combustivel
 
-            resultado = supabase.table("ganhos").insert({
-                "bruto": ganho,
-                "liquido": liquido
-            }).execute()
+            try:
+                resultado = supabase.table("ganhos").insert({
+                    "bruto": ganho,
+                    "liquido": liquido
+                }).execute()
 
-            if resultado.error:
-                resposta.message("Erro ao salvar no banco. Tente novamente mais tarde.")
-            else:
                 resposta.message(f"Seu ganho líquido hoje é: R$ {liquido:.2f}")
+            except Exception as e:
+                print("Erro ao salvar no Supabase:", e)
+                resposta.message("Erro ao salvar no banco. Tente novamente mais tarde.")
 
             session.clear()
         else:
-            resposta.message("Por favor, envie um número válido para o combustível.")
-        return str(resposta)
-
-    else:
-        resposta = MessagingResponse()
-        resposta.message("Erro inesperado. Vamos recomeçar.")
-        session.clear()
-        return str(resposta)
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
